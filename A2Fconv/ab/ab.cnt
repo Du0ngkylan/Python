@@ -1,0 +1,44 @@
+###################################
+#####   SOLVER INFORMATION    #####
+###################################
+!VERSION
+ 3
+!SOLUTION, TYPE=STATIC
+!WRITE,LOG
+!NODE_OUTPUT
+DISP,OFF
+REAC,OFF
+STRAIN,OFF
+STRESS,OFF
+!ELEMENT_OUTPUT, POSITION=INTEG
+STRAIN,OFF
+STRESS,OFF
+PLSTRAIN,OFF
+!SOLVER,METHOD=DIRECT,PRECOND=1,NSET=0,ITERLOG=YES,TIMELOG=YES
+ 500000, 2
+ 1.00e-08, 1.00, 0.0
+ 0.100, 0.100
+!STABILIZE, STAB=1.0000E-06
+!CONTACT_SMOOTHING, STAB=1.000E-03,DISTANCE=1.000E-02
+!OUTPUT_COLL_DATA
+!VTK_OUTPUT_CONTROL
+DISP,OFF
+REAC,OFF
+STRAIN,OFF
+STRESS,OFF
+###################################
+#####   BOUNDARY CONDITIONS   #####
+###################################
+###################################
+#####         MATERIAL        #####
+###################################
+!MATERIAL, NAME=A
+!ELASTIC
+1.,1.
+!MATERIAL, NAME=B
+!ELASTIC
+2.,2.
+###################################
+#####       STEP CONTROL      #####
+###################################
+!END
