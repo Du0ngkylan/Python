@@ -1262,6 +1262,11 @@ namespace Fukumaro.Pages
         {
             //await TakePictureExcute();
             this.InitializeDataModel();
+            for(int i = 0; i < 12; i++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                await this.CaptureButton();
+            }
             await Register();
         }
 
@@ -1313,6 +1318,57 @@ namespace Fukumaro.Pages
             else
             {
                 textStatus.Text = $"Status: init RegisterWapper success!!";
+            }
+        }
+        
+        List<SoftwareBitmap> faceImages = new List<SoftwareBitmap>();
+        IList<Windows.Media.FaceAnalysis.DetectedFace> facesDetected = new List<Windows.Media.FaceAnalysis.DetectedFace>();
+        private async Task CaptureButton()
+        {
+            VideoEncodingProperties videoProperties = _mediaCapture.VideoDeviceController.GetMediaStreamProperties(MediaStreamType.Photo) as VideoEncodingProperties;
+
+            //var lowLagCapture = await _mediaCapture.PrepareLowLagPhotoCaptureAsync(ImageEncodingProperties.CreateUncompressed(MediaPixelFormat.Nv12));
+            //var capturedPhoto = await lowLagCapture.CaptureAsync();
+            //var softwareBitmap = capturedPhoto.Frame.SoftwareBitmap;
+
+            //await lowLagCapture.FinishAsync();
+
+            //VideoFrame previewFrame = new VideoFrame(InputPixelFormat, (int)this.videoProperties.Width, (int)this.videoProperties.Height)
+            const BitmapPixelFormat InputPixelFormat = BitmapPixelFormat.Nv12;
+            using (VideoFrame previewFrame = new VideoFrame(InputPixelFormat, (int)videoProperties.Width, (int)videoProperties.Height))
+            {
+                await this._mediaCapture.GetPreviewFrameAsync(previewFrame);
+                // The returned VideoFrame should be in the supported NV12 format but we need to verify this.
+                if (FaceDetector.IsBitmapPixelFormatSupported(previewFrame.SoftwareBitmap.BitmapPixelFormat))
+                {
+                    SoftwareBitmap originalBitmap = null;
+                    originalBitmap = SoftwareBitmap.Convert(previewFrame.SoftwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+
+                    var faces = await faceTracker1.DetectFacesAsync(previewFrame.SoftwareBitmap);
+                    if (faces == null)
+                    {
+                        textStatus.Text = $"Status: error FaceDetector";
+                        //await lowLagCapture.FinishAsync();
+                        return;
+                    }
+
+                    if (faces.Count == 0)
+                    {
+                        textStatus.Text = $"Status: No FaceDetector";
+                        //await lowLagCapture.FinishAsync();
+                        return;
+                    }
+
+                    if (faces.Count > 1)
+                    {
+                        textStatus.Text = $"Status: many face FaceDetector";
+                        //await lowLagCapture.FinishAsync();
+                        return;
+                    }
+
+                    faceImages.Add(originalBitmap);
+                    facesDetected.Add(faces[0]);
+                }
             }
         }
 
@@ -1369,22 +1425,12 @@ namespace Fukumaro.Pages
                 await Task.Delay(5000);
                 Navigate(typeof(TopPage));
             }
-
-
-
-            
-            logger.Debug($"Initialize---->end");
         }
 
         private void RegisterWapper_Logger(string message)
         {
             logger.Debug($"RegisterWapper_Logger: {message}");
-        }
-
-        List<SoftwareBitmap> faceImages = new List<SoftwareBitmap>();
-        IList<Windows.Media.FaceAnalysis.DetectedFace> facesDetected = new List<Windows.Media.FaceAnalysis.DetectedFace>();
-
-       
+        }  
 
         /// <summary>
         /// BtnCapture_Click
@@ -1393,6 +1439,8 @@ namespace Fukumaro.Pages
         /// <param name="e"></param>
         private async void BtnCapture_Click(object sender, RoutedEventArgs e)
         {
+            List<SoftwareBitmap> faceImages = new List<SoftwareBitmap>();
+            IList<Windows.Media.FaceAnalysis.DetectedFace> facesDetected = new List<Windows.Media.FaceAnalysis.DetectedFace>();
             VideoEncodingProperties videoProperties = _mediaCapture.VideoDeviceController.GetMediaStreamProperties(MediaStreamType.Photo) as VideoEncodingProperties;
 
             //var lowLagCapture = await _mediaCapture.PrepareLowLagPhotoCaptureAsync(ImageEncodingProperties.CreateUncompressed(MediaPixelFormat.Nv12));
