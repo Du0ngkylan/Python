@@ -1,0 +1,24 @@
+Bài tập
+1. Viết một chương trình đồng hồ có năm, tháng, ngày, h, phút, s
+2. Mã hoá dữ liệu dịch ngược File http://files.grouplens.org/papers/ml-1m-README.txt
+3. Viết một chương trình tự động: khi mình đánh 1 chữ thì nó sẽ in ra một chữ
+4. Sắp xếp từng thành phần theo thứ tự tăng dần trong File http://www.magsmaths.com/uploads/1/6/5/1/16518548/nzrainfall.csv
+5. Sắp xếp các số từ bé đến lớn trong File http://fimi.ua.ac.be/data/T10I4D100K.dat
+6. Mã hoá File: mã hoá hex trong File http://files.grouplens.org/papers/ml-1m-README.txt
+7. Viết một chương trình gửi email
+8. Viết một chương trình tự động: nó tự chạy tất cả các chữ cái cho đến con số. Tối đa là 16 chữ hoặc 16 số hoặc 16 chữ và số
+9. Tạo một socket Module
+10. Viết một chương trình Server đơn giản trong Python
+11. Tạo một mật khẩu gồm 8 ký tự & chữ số (có nghĩa là mình bắt buộc phải đánh 8 ký tự và chữ số)
+12. Tạo một URL
+13. Tạo một URL khó đoán, có chứa một mã thông báo bảo mật thích hợp cho các ứng dụng phục hồi mật khẩu
+14. Xác định chuỗi Byte trong câu "Help me, please" (sử dụng import hashlib)
+15. Giải mã File khi mã hoá xong ở BT 6
+16. Giải mã File khi mã hoá xong ở BT 2
+17. Viết chương trình khi mình viết một câu, cuối câu có dấu chấm, dấu phẩy thì nó sẽ tự động in ra
+18. Viết một chương trình Client đơn giản
+19. Viết một chương trình kết nối Database
+20. Tạo một bảng dữ liệu
+
+
+https://stackoverflow.com/questions/8030468/how-do-you-sort-multiple-columns-of-a-csv-file-using-python
