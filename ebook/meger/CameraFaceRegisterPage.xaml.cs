@@ -670,30 +670,22 @@ namespace Fukumaro.Pages
         private static int Comparison(DeviceInformation a, DeviceInformation b)
         {
             // "FJ Camera"を先頭
-            string fjCamera = "FJ Camera";
-            if (a.Name == fjCamera)
+            string fjCamera = "FJ Camera";          
+            if (a.Name == fjCamera || b.Name == fjCamera)
             {
-                return -1;
-            }
-            else if (b.Name == fjCamera)
-            {
-                return 1;
+              return a.Name == fjCamera ? -1 : 1;
             }
 
             // "FJ ○M Camera"が次.
-            string fjMCamera = @"FJ .*M Camera";
+            string fjMCamera = @"FJ .*M Camera";        
             if (Regex.IsMatch(a.Name, fjMCamera))
             {
-                // 両方とも"FJ ○M Camera"の場合、○の値でソートする.
-                if (Regex.IsMatch(b.Name, fjMCamera))
-                {
-                    return a.Name.CompareTo(b.Name);
-                }
-                return -1;
-            }
+              // 両方とも"FJ ○M Camera"の場合、○の値でソートする.
+              return Regex.IsMatch(b.Name, fjMCamera) ? a.Name.CompareTo(b.Name) : -1;
+            } 
             else if (Regex.IsMatch(b.Name, fjMCamera))
             {
-                return 1;
+              return 1;
             }
             return -1;
         }
