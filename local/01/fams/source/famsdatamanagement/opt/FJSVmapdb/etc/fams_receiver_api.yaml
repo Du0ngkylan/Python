@@ -1,0 +1,237 @@
+#  COPYRIGHT 2019 FUJITSU LIMITED
+#  
+#  @file   fams_receiver_api.yaml
+#  @brief  富士通養殖システム管理IF設計ファイル
+#  @author anhnguyen
+#  @date   2019/01/30
+
+swagger: '2.0'
+info:
+  description: >
+    <h3>変更履歴</h3>
+    <table border="1">
+      <thead>
+        <tr>
+          <th style="text-align:left">版数</th>
+          <th style="text-align:left">日付け</th>
+          <th style="text-align:left">編集者</th>
+          <th style="text-align:left">変更概要</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="text-align:left">1</td>
+          <td style="text-align:left">2018/11/12</td>
+          <td style="text-align:left">AnhNguyen</td>
+          <td style="text-align:left">新規作成</td>
+        </tr>
+        <tr>
+          <td style="text-align:left">1.001</td>
+          <td style="text-align:left">2018/12/28</td>
+          <td style="text-align:left">AnhNguyen</td>
+          <td style="text-align:left">想定センサーデータの情報により更新</td>
+        </tr>
+      </tbody>
+    </table>
+  version: '1.001'
+  title: 基本設計書インターフェース仕様書
+schemes: 
+  - http
+basePath: /api/v1
+produces: 
+  - application/json
+consumes: 
+  - application/json
+paths:
+  /data/waterReplaceTank/update:
+    post:
+      tags:
+        - IF001・換水用タンクにてのセンサ情報更新API
+      summary: "換水用タンクにてのセンサ情報を更新する"
+      parameters:
+        - name: Body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                data:
+                  type: array
+                  description: "データroot(備考：複数データ)"
+                  items:
+                    type: object
+                    properties:
+                      timestamp:
+                        type: string
+                        default: ''
+                        description: "測定時刻(備考：RFC 3339)"
+                        maxLength: 30
+                      water_level:
+                        type: number
+                        default: -1
+                        description: "水位(備考：単位：℃)"
+                        maxLength: 4
+                      water_temp:
+                        type: number
+                        default: -1
+                        description: "水温(備考：単位：℃)"
+                        maxLength: 5
+      responses:
+        '200':
+          description: 正常終了。200以外はGatewayから2回リトライする。
+        '303':
+          description: バージョンが間違った(エラーコード「null」)
+        '400':
+          description: 送信データ形式が間違った(エラーコード「null」)
+  /data/cistern/update:
+    post:
+      tags:
+        - IF002・飼育水槽にてのセンサ情報更新API
+      summary: "飼育水槽にてのセンサ情報を更新する"
+      parameters:
+        - name: Body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                data:
+                  type: array
+                  description: "データroot(備考：複数データ)"
+                  maxLength: 13
+                  items:
+                    type: object
+                    properties:
+                      timestamp:
+                        type: string
+                        default: ''
+                        description: "測定時刻(備考：RFC 3339)"
+                        maxLength: 30
+                      cistern_code:
+                        type: string
+                        default: ''
+                        description: "水槽コード(備考：)"
+                        maxLength: 5
+                      inflow_temp:
+                        type: number
+                        default: -1
+                        description: "水温（水槽流入水）(備考：単位：℃)"
+                        maxLength: 4
+                      outflow_temp:
+                        type: number
+                        default: -1
+                        description: "水温（水槽流出水）(備考：単位：℃)"
+                        maxLength: 5
+                      upper_central_ill:
+                        type: integer
+                        default: -1
+                        format: int32
+                        description: "照度（水槽中央上部）(備考：単位：LUX)"
+                        maxLength: 5
+                      lower_central_ill:
+                        type: integer
+                        default: -1
+                        format: int32
+                        description: "照度（水槽中央下部）(備考：単位：LUX)"
+                        maxLength: 5
+                      salt:
+                        type: number
+                        default: -1
+                        description: "塩分(備考：単位：‰)"
+                        maxLength: 5
+                      pH:
+                        type: number
+                        default: -1
+                        description: "pH(備考：)"
+                        maxLength: 4
+      responses:
+        '200':
+          description: 正常終了
+        '303':
+          description: バージョンが間違った(エラーコード「null」)
+        '400':
+          description: 送信データ形式が間違った(エラーコード「null」)
+        '404':
+          description: 水槽が存在しない(エラーコード「null」)
+  /data/nitrificationTank/update:
+    post:
+      tags:
+        - IF003・硝化槽にてのセンサ情報更新API
+      summary: "硝化槽にてのセンサ情報を更新する"
+      parameters:
+        - name: Body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                data:
+                  type: array
+                  description: "データroot(備考：複数データ)"
+                  maxLength: 13
+                  items:
+                    type: object
+                    properties:
+                      timestamp:
+                        type: string
+                        default: ''
+                        description: "測定時刻(備考：RFC 3339)"
+                        maxLength: 30
+                      water_temp:
+                        type: number
+                        default: -1
+                        description: "水温(備考：単位：℃)"
+                        maxLength: 5
+      responses:
+        '200':
+          description: 正常終了
+        '303':
+          description: バージョンが間違った(エラーコード「null」)
+        '400':
+          description: 送信データ形式が間違った(エラーコード「null」)
+  /data/outside/update:
+    post:
+      tags:
+        - IF004・外にてのセンサ情報更新API
+      summary: "外にてのセンサ情報を更新する"
+      parameters:
+        - name: Body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                data:
+                  type: array
+                  description: "データroot(備考：複数データ)"
+                  maxLength: 13
+                  items:
+                    type: object
+                    properties:
+                      timestamp:
+                        type: string
+                        default: ''
+                        description: "測定時刻(備考：RFC 3339)"
+                        maxLength: 30
+                      room_temp:
+                        type: number
+                        default: -1
+                        description: "室温(備考：単位：℃)"
+                        maxLength: 5
+                      humidity:
+                        type: number
+                        default: -1
+                        description: "湿度(備考：単位：%)"
+                        maxLength: 4
+                      atmospheric_pressure:
+                        type: number
+                        default: -1
+                        description: "気圧(備考：単位：hPa)"
+                        maxLength: 6
+      responses:
+        '200':
+          description: 正常終了
+        '303':
+          description: バージョンが間違った(エラーコード「null」)
+        '400':
+          description: 送信データ形式が間違った(エラーコード「null」)

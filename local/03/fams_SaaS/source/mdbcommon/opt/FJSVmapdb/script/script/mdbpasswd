@@ -1,0 +1,129 @@
+#!/bin/bash
+# COPYRIGHT 2017 FUJITSU LIMITED
+# @file        mdbpasswd
+# @brief       update database password tool script
+# @author      antn
+# @date        2016/11/22
+
+# Settings
+declare -A DATABASE_CONF_FILE_LIST=(
+    ["mdbdynamicdb"]="/opt/FJSVmapdb/etc/dynamic_management_db.conf"
+)
+
+MSG_SUCCESS="設定ファイルの変更が完了しました。"
+MSG_ERR_DOUBLE_RUN="実行したコマンドが二重起動です。"
+MSG_ERR_CMD_FAILED="パスワード変更コマンドが失敗しました。"
+# Default
+mdb_handle_signal_external() {
+    :
+}
+
+mdb_handle_exit_external() {
+    local ARG=$1
+    case "${ARG}"  in
+        2 )
+            echo -e "${MSG_ERR_CMD_FAILED}"
+        ;;
+        3 )
+            echo -e "${MSG_ERR_CMD_FAILED}"
+        ;;
+    esac
+}
+
+MAPDB_FUNCTIONS_PATH=/opt/FJSVmapdb/script/mapdb_functions
+if [ -f "${MAPDB_FUNCTIONS_PATH}" ]; then
+    source "${MAPDB_FUNCTIONS_PATH}"
+else
+    >&2 echo -e "File not found: ${MAPDB_FUNCTIONS_PATH}"
+    exit 1
+fi
+MDB_UID=$(${CMD_ID} -u)
+if [ $? -ne "${RESULT_OK}" ]; then
+    # can not get uid -> set uid = 0
+    MDB_UID=0
+fi
+
+mdb_cmd_lock -n 2>/dev/null
+if [ "$?" -ne 0 ]; then
+    echo -e "${MSG_ERR_DOUBLE_RUN}"
+    exit 1
+fi
+
+trap mdb_handle_signal ${SIGNALS}
+trap mdb_handle_exit EXIT
+trap '' SIGINT
+
+
+# Logic script
+CONF_FILES=""
+for i in "${!DATABASE_CONF_FILE_LIST[@]}"
+do
+    CONF_FILES="${CONF_FILES} ${DATABASE_CONF_FILE_LIST[$i]}"
+done
+if [ "$*" != "" ]; then
+    CONF_FILES=""
+    OPTIND=1
+    while getopts "d:" OPT >/dev/null 2>&1; do
+        case "$OPT" in
+            "d")
+                FILE=$OPTARG
+                if [ "${CONF_FILES}" != "" ]; then
+                    mdb_apllog_critical "Multi use -d argument"
+                    exit 2
+                fi
+                if [ "${FILE}" = "" ]; then
+                    mdb_apllog_critical "argument -d used wrong"
+                    exit 2
+                else
+                    CONF_FILES=${DATABASE_CONF_FILE_LIST["$FILE"]}
+                    if [ "${CONF_FILES}" = "" ]; then
+                        mdb_apllog_critical "-d $OPTARG wrong"
+                        exit 2
+                    fi
+                fi
+                if [ ! -f "${CONF_FILES}" ]; then
+                    mdb_apllog_critical "${CONF_FILES} does not exists"
+                    exit 3
+                fi
+            ;;
+            *)
+                mdb_apllog_critical "wrong argument"
+                exit 2
+            ;;
+        esac
+    done
+    shift $((OPTIND-1))
+fi
+
+
+echo -n "Passwd: "
+if [ ${MDB_UID} -eq 0 ]; then
+    PASSDBENCRYPT=$("${CMD_SUDO}" -u "${FJSVMAPDB_USER}" /opt/FJSVmapdb/script/mdbencryptor 2>/dev/null)
+else
+    PASSDBENCRYPT=$(/opt/FJSVmapdb/script/mdbencryptor 2>/dev/null)
+fi
+
+if [ $? -ne 0 ]; then
+    stty echo
+    echo -e
+    mdb_apllog_critical "mdbencryptor return fail"
+    exit 2
+fi
+
+echo -e
+
+for DB_CONF_FILE in $CONF_FILES
+do
+    mdb_apllog_info "Updating password for $DB_CONF_FILE"
+    if [ ! -f "$DB_CONF_FILE" ]; then
+        mdb_apllog_info "File not found $DB_CONF_FILE"
+        continue
+    fi
+    # use sed -r for pass character '/' in PASSDBENCRYPT
+    sed -i -r "s#[ \t]*password=.*#password=${PASSDBENCRYPT}#" "$DB_CONF_FILE" >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        mdb_apllog_critical "can not update password for $DB_CONF_FILE"
+        exit 2
+    fi
+done
+echo -e "${MSG_SUCCESS}"

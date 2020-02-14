@@ -1,0 +1,164 @@
+#!/bin/bash
+# COPYRIGHT 2017 FUJITSU LIMITED
+# @file        mdbutil
+# @brief       implement mdbutil script
+# @author      cuongadp
+# @date        2016/11/09
+
+LOG_INIT_BIN="/opt/FJSVmapdb/script/mdbdbgloginit"   # - logconfig execution tools for init shared mem
+
+MAPDB_DB_CONF_LIST="
+/opt/FJSVmapdb/etc/dynamic_management_db.conf \
+"
+
+DUPLICATED_EXECUTION="実行したコマンドが二重起動です。"
+SERVER_START_COMPLETED="サーバ開始コマンドが完了しました。"
+SERVER_SHUTDOWN_COMPLETED="サーバ終了コマンドが完了しました。"
+
+OPTION="${1}"                           # - $1 means parameter 1 in command line
+
+# Config for mapdb_functions
+mdb_handle_signal_external() {
+    #un-used
+    :
+}
+
+# custom no rotate for only this script because this script handle rotate all
+handle_exit_no_rotate() {
+    # unlock
+    mdb_cmd_unlock
+    # revert trap to default
+    trap - ${SIGNALS} EXIT
+}
+
+# Using utilities function
+MAPDB_FUNCTIONS_FILE=/opt/FJSVmapdb/script/mapdb_functions
+if [ -f ${MAPDB_FUNCTIONS_FILE} ]; then
+    source "${MAPDB_FUNCTIONS_FILE}"
+else
+    echo -e "File not found: ${MAPDB_FUNCTIONS_FILE}" >&2
+    exit 1
+fi
+
+MDBPID_PATH="${FJSVMAPDB_PIDDIR}/$("${CMD_BASENAME}" $0).pid" # - lock to prevent call start many times.
+
+#function: start()
+#brief:
+#   - Initialize folders for log's operation
+start() {
+    mdb_apllog_info "Start service..."
+    for CONF_FILE in ${MAPDB_DB_CONF_LIST}
+    do
+        # we only copy configuration file if it exists
+        if [ -f "${CONF_FILE}" ]; then
+            ${CMD_CP} -p "${CONF_FILE}" "${FJSVMAPDB_CONFDIR}/" >/dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                mdb_apllog_warn "${CMD_CP} ${CONF_FILE} failed"
+            fi
+        fi
+    done
+
+    # init share log config
+    "${CMD_RUNUSER}" -l "${FJSVMAPDB_USER}" -c "${LOG_INIT_BIN}" >/dev/null 2>&1
+    if [ $? -ne "${RESULT_OK}" ]; then
+        mdb_apllog_critical "Start failed!"
+        return "${RESULT_NG}"
+    fi
+
+    mdb_apllog_info "Start successfully!"
+    return "${RESULT_OK}"
+}
+
+#function: stop ()
+#brief:
+#   - Clean up and perform log rotation
+stop() {
+    mdb_apllog_debug "Stop service..."
+
+    # perform rotation
+    mdb_logrotate
+
+    # remove all logfile in temp log directory
+    ${CMD_RM} -rf "${FJSVMAPDB_MEMLOGDIR}"/*
+
+    return "${RESULT_OK}"
+}
+
+######################################################################
+####                          main flow                           ####
+######################################################################
+# lock script
+mdb_cmd_lock -n > /dev/null 2>&1
+if [ $? -ne "${RESULT_OK}" ]; then
+    mdb_apllog_info "$DUPLICATED_EXECUTION"
+    echo "$DUPLICATED_EXECUTION"
+    exit 1
+fi
+
+# enable trap signal
+trap mdb_handle_signal ${SIGNALS}
+# enable trap interrupt
+trap '' SIGINT
+
+if [ "${OPTION}" == "stop" ]; then
+    # not auto rotate in the case stop because stop move all logfile
+    trap handle_exit_no_rotate EXIT
+else
+    # using default trap exit
+    trap mdb_handle_exit EXIT
+fi
+
+mdb_apllog_info "Execute with option: ${OPTION}"
+
+case ${OPTION} in
+    start)
+        if [ ! -f "${MDBPID_PATH}" ]; then
+            start
+            if [ $? -ne "${RESULT_OK}" ]; then
+                mdb_apllog_critical "Start log service failed"
+                mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Start log service fail."
+                exit ${RESULT_NG}
+            else
+                #after starting success then create a flag file
+                echo $$ > "${MDBPID_PATH}"
+                if [ $? -ne 0 ]; then
+                    mdb_apllog_critical "Fail to create start lock"
+                    mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Fail to create start lock."
+                    return "${RESULT_NG}"
+                fi
+                "${CMD_CHOWN}" -R "${FJSVMAPDB_USERGROUP}" "${MDBPID_PATH}" > /dev/null 2>&1
+                if [ $? -ne 0 ]; then
+                    mdb_apllog_warn "${CMD_CHOWN} ${MDBPID_PATH} failed"
+                fi
+                mdb_apllog_info "${SERVER_START_COMPLETED}"
+                echo "${SERVER_START_COMPLETED}"
+            fi
+        else
+            mdb_apllog_info "${SERVER_START_COMPLETED}"
+            echo "${SERVER_START_COMPLETED}"
+            exit "${RESULT_NG}"
+        fi
+    ;;
+    stop)
+        if [ -f "${MDBPID_PATH}" ]; then
+            stop
+            if [ $? -ne "${RESULT_OK}" ]; then
+                mdb_apllog_critical "Fail stop log service."
+                mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Fail to stop log service."
+                exit "${RESULT_NG}"
+            fi
+            ${CMD_RM} -rf "${MDBPID_PATH}"
+            mdb_apllog_info "${SERVER_SHUTDOWN_COMPLETED}"
+            echo "${SERVER_SHUTDOWN_COMPLETED}"
+        else
+            mdb_apllog_info "${SERVER_SHUTDOWN_COMPLETED}"
+            echo "${SERVER_SHUTDOWN_COMPLETED}"
+            exit "${RESULT_NG}"
+        fi
+    ;;
+    *)
+        mdb_apllog_info "Wrong usage: $0 (start|stop)"
+esac
+exit "${RESULT_OK}"
+
+######################################################################

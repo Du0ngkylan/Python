@@ -1,0 +1,1 @@
+link ../lib/libmdblog/include/MDBDebugLog.h

@@ -1,0 +1,93 @@
+#  COPYRIGHT 2020 FUJITSU LIMITED
+#  
+#  @file   fams_receiver_api.yaml
+#  @brief  富士通養殖システム管理IF設計ファイル
+#  @author ThangLQ
+#  @date   20/1/2020
+
+swagger: '2.0'
+info:
+  description: >
+    <h3>変更履歴</h3>
+    <table border="1">
+      <thead>
+        <tr>
+          <th style="text-align:left">版数</th>
+          <th style="text-align:left">日付け</th>
+          <th style="text-align:left">編集者</th>
+          <th style="text-align:left">変更概要</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="text-align:left">1</td>
+          <td style="text-align:left">20/1/2020</td>
+          <td style="text-align:left">thangle</td>
+          <td style="text-align:left">新規作成</td>
+        </tr>
+      </tbody>
+    </table>
+  version: '1'
+  title: 基本設計書インターフェース仕様書
+schemes: 
+  - http
+basePath: /fishtech/{TENANT_CODE}/api/{API_VERSION}
+produces: 
+  - application/json
+consumes: 
+  - application/json
+paths:
+  /data/sensor/update:
+    post:
+      tags:
+        - IF001・センサ情報更新API
+      summary: "センサ情報を更新する"
+      parameters:
+        - name: Body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+                data:
+                  type: array
+                  description: "データroot(備考: 複数データ)"
+                  maxLength: 20
+                  items:
+                    type: object
+                    properties:
+                      timeStamp:
+                        type: string
+                        default: ''
+                        minLength: 0
+                        description: "測定時刻(備考: RFC 3339)"
+                        maxLength: 30
+                      rtuId:
+                        type: integer
+                        format: int64
+                        default: -1
+                        description: "RTUID(備考: RTUに紐づくユニークなID)"
+                      sensorData:
+                        type: array
+                        description: "センサーデータ"
+                        maxLength: 100
+                        items:
+                          type: object
+                          properties:
+                            rtuChannel:
+                              type: integer
+                              format: int64
+                              default: -1
+                              description: "RTUチャネル番号(備考: RTU内のユニークなChannel番号)"
+                            value:
+                              type: number
+                              default: -1
+                              description: "センサー値"
+                              maxLength: 5
+      responses:
+        '200':
+          description: 正常終了
+        '303':
+          description: バージョンが間違った(エラーコード「null」)
+        '400':
+          description: 送信データ形式が間違った(エラーコード「null」)

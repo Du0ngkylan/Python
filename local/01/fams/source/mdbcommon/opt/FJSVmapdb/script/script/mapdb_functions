@@ -1,0 +1,754 @@
+# COPYRIGHT 2017 FUJITSU LIMITED
+# @file        mapdb_functions
+# @brief       implement function for mapdb scripts
+# @author      antn
+# @date        2016/11/09
+
+if [ "${CMD_MV}" == "" ]; then
+    CMD_MV=/usr/bin/mv
+fi
+
+if [ "${CMD_BACKUP}" == "" ]; then
+    CMD_BACKUP=/usr/bin/mv
+fi
+
+if [ "${CMD_CP}" == "" ]; then
+    CMD_CP=/usr/bin/cp
+fi
+
+if [ "${CMD_MKDIR}" == "" ]; then
+    CMD_MKDIR=/usr/bin/mkdir
+fi
+
+if [ "${CMD_TOUCH}" == "" ]; then
+    CMD_TOUCH=/usr/bin/touch
+fi
+
+if [ "${CMD_RM}" == "" ]; then
+    CMD_RM=/usr/bin/rm
+fi
+
+if [ "${CMD_CHMOD}" == "" ]; then
+    CMD_CHMOD=/usr/bin/chmod
+fi
+
+if [ "${CMD_CHOWN}" == "" ]; then
+    CMD_CHOWN=/usr/bin/chown
+fi
+
+if [ "${CMD_MOUNT}" == "" ]; then
+    CMD_MOUNT=/usr/bin/mount
+fi
+
+if [ "${CMD_UMOUNT}" == "" ]; then
+    CMD_UMOUNT=/usr/bin/umount
+fi
+
+if [ "${CMD_FLOCK}" == "" ]; then
+    CMD_FLOCK=/usr/bin/flock
+fi
+
+if [ "${CMD_BASENAME}" == "" ]; then
+    CMD_BASENAME=/usr/bin/basename
+fi
+
+if [ "${CMD_STAT}" == "" ]; then
+    CMD_STAT=/usr/bin/stat
+fi
+
+if [ "${CMD_SED}" == "" ]; then
+    CMD_SED=/usr/bin/sed
+fi
+
+if [ "${CMD_DATE}" == "" ]; then
+    CMD_DATE=/usr/bin/date
+fi
+
+if [ "${CMD_FIND}" == "" ]; then
+    CMD_FIND=/usr/bin/find
+fi
+
+if [ "${CMD_XARGS}" == "" ]; then
+    CMD_XARGS=/usr/bin/xargs
+fi
+
+if [ "${CMD_KILL}" == "" ]; then
+    CMD_KILL=/usr/bin/kill
+fi
+
+if [ "${CMD_GREP}" == "" ]; then
+    CMD_GREP=/usr/bin/grep
+fi
+
+if [ "${CMD_ID}" == "" ]; then
+    CMD_ID=/usr/bin/id
+fi
+
+if [ "${CMD_CAT}" == "" ]; then
+    CMD_CAT=/usr/bin/cat
+fi
+
+if [ "${CMD_RUNUSER}" == "" ]; then
+    CMD_RUNUSER=/sbin/runuser
+fi
+
+if [ "${CMD_SUDO}" == "" ]; then
+    CMD_SUDO=/bin/sudo
+fi
+
+if [ "${CMD_RPM}" == "" ]; then
+    CMD_RPM=/usr/bin/rpm
+fi
+
+if [ "${CMD_PGREP}" == "" ]; then
+    CMD_PGREP=/usr/bin/pgrep
+fi
+
+if [ "${CMD_AWK}" == "" ]; then
+    CMD_AWK=/usr/bin/awk
+fi
+
+# initilize variable ${FJSVMAPDB_SCRIPTNAME}
+if [ "${FJSVMAPDB_SCRIPTNAME}" == "" ]; then
+    FJSVMAPDB_SCRIPTNAME=$("${CMD_BASENAME}" $0)
+    if [ $? -ne 0 ]; then
+        exit "${RESULT_NG}"
+    fi
+fi
+
+# set default FJSVMAPDB_LOCKDIR
+if [ "${FJSVMAPDB_LOCKDIR}" == "" ]; then
+    FJSVMAPDB_LOCKDIR=/var/lock/mapdb
+fi
+
+# set default FJSVMAPDB_LOCKFILE
+if [ "${FJSVMAPDB_LOCKFILE}" == "" ]; then
+    FJSVMAPDB_LOCKFILE=${FJSVMAPDB_LOCKDIR}/${FJSVMAPDB_SCRIPTNAME}
+fi
+
+# set default FJSVMAPDB_MSGLISTFILE
+if [ "${FJSVMAPDB_MSGLISTFILE}" == "" ]; then
+    FJSVMAPDB_MSGLISTFILE=/opt/FJSVmapdb/etc/syslog.conf
+fi
+
+# set default FJSVMAPDB_MEMLOGDIR
+if [ "${FJSVMAPDB_MEMLOGDIR}" == "" ]; then
+    FJSVMAPDB_MEMLOGDIR=/var/log/mapdbtmp
+fi
+
+# set default FJSVMAPDB_LOGDIR
+if [ "${FJSVMAPDB_LOGDIR}" == "" ]; then
+    FJSVMAPDB_LOGDIR=/var/log/mapdb
+fi
+
+# set default FJSVMAPDB_PIDDIR
+if [ "${FJSVMAPDB_PIDDIR}" == "" ]; then
+    FJSVMAPDB_PIDDIR=/var/run/mapdb
+fi
+
+# set default FJSVMAPDB_CONFDIR
+if [ "${FJSVMAPDB_CONFDIR}" == "" ]; then
+    FJSVMAPDB_CONFDIR=/dev/mapdb
+fi
+
+# set default value for command fail in pipe
+FJSVMAPDB_PIPENO_FAILED=0
+#
+FJSVMAPDB_USED_CMD_LOCK=0
+
+FJSVMAPDB_HIDE_APLLOG=1
+
+readonly FJSVMAPDB_MAX_LOGFILE_SIZE=2097152
+readonly FJSVMAPDB_LOGFILE=${FJSVMAPDB_MEMLOGDIR}/${FJSVMAPDB_SCRIPTNAME}.log
+readonly RESULT_OK=0
+readonly RESULT_NG=1
+readonly FJSVMAPDB_USER=mapdb
+readonly FJSVMAPDB_GROUP=mapdb
+readonly FJSVMAPDB_USERGROUP=${FJSVMAPDB_USER}:${FJSVMAPDB_GROUP}
+readonly MDB_BASEMAP_BIN=/opt/FJSVmapdb/script/mdbbasemap
+readonly FJSVMAPDB_DAEMON_STARTED_THREADNUM=4
+readonly LOG_MODULE_ERROR="Abnomality occurred at log function."
+
+mdb_cmd_check_pipestatus()
+{
+    FJSVMAPDB_PIPENO_FAILED=0
+    local PIPENO_FAILED=1
+    for i in "$@"
+    do
+        if [ "$i" -ne 0 ]; then
+            FJSVMAPDB_PIPENO_FAILED=${PIPENO_FAILED}
+            return "$i"
+        fi
+        PIPENO_FAILED=$((PIPENO_FAILED + 1))
+    done
+    return ${RESULT_OK}
+}
+
+# lock script
+mdb_cmd_lock() {
+    if [ "$2" != "" ]; then # additional param used for lock's filename
+        FJSVMAPDB_LOCKFILE="${FJSVMAPDB_LOCKFILE}_$2"
+    fi
+    FJSVMAPDB_LOCKFILE="${FJSVMAPDB_LOCKFILE}.lock"
+    if [ ! -e "${FJSVMAPDB_LOCKFILE}" ] ; then
+        ${CMD_TOUCH} "${FJSVMAPDB_LOCKFILE}" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            mdb_apllog_critical "mdb_cmd_lock() failed [command = ${CMD_TOUCH}], [file = ${FJSVMAPDB_LOCKFILE}]"
+            return ${RESULT_NG}
+        fi
+    fi
+    exec 9<"${FJSVMAPDB_LOCKFILE}"
+    if [ "$?" -ne 0 ]; then
+        mdb_apllog_critical "mdb_cmd_lock() failed [command = exec], [file = ${FJSVMAPDB_LOCKFILE}]"
+        return ${RESULT_NG}
+    fi
+    "${CMD_FLOCK}" -e -x $1 9 >/dev/null 2>&1 # $1 is flock's parameter input to mdb_cmd_lock() (eg: -n: non-block)
+    if [ "$?" -ne 0 ]; then
+        mdb_apllog_critical "mdb_cmd_lock() failed [command = ${CMD_FLOCK}], [file = ${FJSVMAPDB_LOCKFILE}]"
+        return ${RESULT_NG}
+    fi
+    FJSVMAPDB_USED_CMD_LOCK=1
+    return ${RESULT_OK}
+}
+
+# unlock script
+mdb_cmd_unlock() {
+    if [ ${FJSVMAPDB_USED_CMD_LOCK} -ne 1 ]; then
+        # ignore in the case we not call cmd_unlock
+        return ${RESULT_OK}
+    fi
+    exec 9<&-
+    if [ "$?" -ne 0 ]; then
+        mdb_apllog_warn "mdb_cmd_unlock() failed [command = exec], [file = ${FJSVMAPDB_LOCKFILE}]"
+    fi
+    
+    ${CMD_RM} -f "${FJSVMAPDB_LOCKFILE}" > /dev/null 2>&1
+    if [ "$?" -ne 0 ]; then
+        mdb_apllog_warn "mdb_cmd_unlock() failed [command = ${CMD_RM}], [file = ${FJSVMAPDB_LOCKFILE}]"
+    fi
+    return "${RESULT_OK}"
+}
+
+mdb_handle_signal() {
+    mdb_apllog_info "handling signal $1"
+    mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000702" -1 "Handling signal $1."
+    
+    local CHLD_JOBS
+    CHLD_JOBS=$(jobs -p)
+    if [ "${CHLD_JOBS}" != "" ]; then
+        ${CMD_KILL} -SIGKILL ${CHLD_JOBS} >/dev/null 2>&1
+        mdb_apllog_info "mdb_handle_signal() send SIGKILL pids = [${CHLD_JOBS}]"
+    fi
+    
+    # receive function
+    mdb_handle_signal_external
+    if [ "$?" -ne 0 ]; then
+        mdb_apllog_warn "mdb_handle_signal_external() execute failed"
+    fi
+    mdb_apllog_info "mdb_handle_signal_external() executed"
+    
+    mdb_logrotate "--only-rotate"
+    
+    mdb_cmd_unlock
+    
+    # revert trap default
+    trap - ${SIGNALS} EXIT
+    
+    exit ${RESULT_NG}
+}
+
+# trap exit for clear lock file
+mdb_handle_exit() {
+    local EXITCODE=$?
+    if [ ${EXITCODE} -ne 0 ]; then
+        local CHLD_JOBS
+        CHLD_JOBS=$(jobs -p)
+        if [ "${CHLD_JOBS}" != "" ]; then
+            "${CMD_KILL}" -SIGKILL "${CHLD_JOBS}" >/dev/null 2>&1
+            mdb_apllog_info "mdb_handle_signal() send SIGKILL pids = [${CHLD_JOBS}]"
+        fi
+    fi
+    
+    # handle exit at here
+    if [ ! "$(type -t mdb_handle_exit_external)" == "function" ]; then
+        mdb_apllog_info "mdb_handle_exit_external function is not define."
+    else
+        mdb_handle_exit_external "${EXITCODE}"
+        if [ "$?" -ne 0 ]; then
+            mdb_apllog_warn "mdb_handle_exit_external() execute failed"
+        fi
+    fi
+    
+    mdb_apllog_info "mdb_handle_exit() is finishing"
+    
+    mdb_logrotate "--only-rotate"
+    # unlock
+    mdb_cmd_unlock
+    
+    # revert trap to default
+    trap - ${SIGNALS} EXIT
+    exit ${EXITCODE}
+}
+
+# How to use: mdb_syslog -t <ApplicationName> -i <SyslogID> -1 <arg1> -2 <arg2> -3 <arg3> -4 <arg4> -5 <arg5>
+# Format message syslog: Reference: "マップDB管理_属性一覧.xlsx"
+# SyslogID define in FJSVMAPDB_MSGLISTFILE with format below:
+# <SyslogID>=<priority>,<MDB_FACILITY_INFO>,<message>
+#   priority: <info|warn|err|crit>
+#   MDB_FACILITY_INFO: <auth|authpriv|cron|daemon|kern|lpr|mail|news|syslog|user|uucp|local0|local1|local2|local3|local4|local5|local6|local7>
+# Example: F000702=info,local7,ログ機能(message:%s)
+mdb_syslog() {
+    # reset OPTIND
+    OPTIND=1
+    local OPT=''
+    local OPT_T=''
+    local OPT_I=''
+    local OPT_1=''
+    local OPT_2=''
+    local OPT_3=''
+    local OPT_4=''
+    local OPT_5=''
+    local OPT_6=''
+    local OPT_7=''
+    local OPT_8=''
+    local OPT_9=''
+    
+    local arg=$*
+    
+    while getopts t:i:1:2:3:4:5:6:7:8:9 OPT > /dev/null 2>&1 ; do
+        
+        case $OPT in
+            
+            "t" ) OPT_T="$OPTARG" ;;
+            
+            "i" ) OPT_I="$OPTARG" ;;
+            
+            "1" ) OPT_1="$OPTARG" ;;
+            
+            "2" ) OPT_2="$OPTARG" ;;
+            
+            "3" ) OPT_3="$OPTARG" ;;
+            
+            "4" ) OPT_4="$OPTARG" ;;
+            
+            "5" ) OPT_5="$OPTARG" ;;
+            
+            "6" ) OPT_6="$OPTARG" ;;
+            
+            "7" ) OPT_7="$OPTARG" ;;
+            
+            "8" ) OPT_8="$OPTARG" ;;
+            
+            "9" ) OPT_9="$OPTARG" ;;
+            
+            *  ) logger -t "${0##*/}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:wrong options \"${FUNCNAME} ${arg}\")"
+                # log configuration is not loaded yet
+                
+            return ${RESULT_NG};;
+        esac
+    done
+    
+    shift "$(($OPTIND - 1))"
+    if [ $# -ne 0 ]; then
+        logger -t "${0##*/}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:wrong options \"${FUNCNAME} ${arg}\")"
+        # log configuration is not loaded yet
+        return "${RESULT_NG}";
+    fi
+    
+    if [ -z ${OPT_T} ]; then
+        
+        logger -t "${0##*/}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:missing \"-t\" option \"${FUNCNAME} ${arg}\")"
+        # log configuration is not loaded yet
+        return "${RESULT_NG}";
+    fi
+    
+    if [ -z ${OPT_I} ]; then
+        
+        logger -t "${0##*/}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:missing \"-i\" option \"${FUNCNAME} ${arg}\")"
+        # log configuration is not loaded yet
+        return "${RESULT_NG}";
+    fi
+    local MDB_SYSTEM_MSG_LINE=""
+    MDB_SYSTEM_MSG_LINE=$(${CMD_GREP} -wE "^[[:space:]]*${OPT_I}" "${FJSVMAPDB_MSGLISTFILE}" 2>/dev/null)
+    case $? in
+        0)
+        ;;
+        1)
+            # Error getting configuration
+            logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:${FJSVMAPDB_MSGLISTFILE} does not contain ${OPT_I})"
+            return "${RESULT_NG}"
+        ;;
+        *)
+            # Error getting configuration
+            logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:Can not read ${FJSVMAPDB_MSGLISTFILE})"
+            return "${RESULT_NG}"
+        ;;
+    esac
+    
+    # un-check pipe: can detect error by "case ${MDB_STR_TMP}"
+    local MDB_SYSTEM_MSG=$(echo "${MDB_SYSTEM_MSG_LINE}" | awk -F "=" '{ print $2 }')
+    local MDB_FACILITY_INFO=$(echo "${MDB_SYSTEM_MSG}" | awk -F "," '{ print $2 }')
+    local MDB_STR_TMP=$(echo ${MDB_FACILITY_INFO} | tr [:upper:] [:lower:])
+    case ${MDB_STR_TMP} in
+        auth|authpriv|cron|daemon|kern|lpr|mail|news|syslog|user|uucp|local0|local1|local2|local3|local4|local5|local6|local7)
+            :
+        ;;
+        
+        *)
+            # Error configuration facility
+            logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:${OPT_I} in ${FJSVMAPDB_MSGLISTFILE} is wrong facility)"
+        return ${RESULT_NG};;
+    esac
+    
+    # un-check pipe: can detect error by "case ${MDB_STR_TMP}"
+    local MDB_LEVEL_INFO=$(echo ${MDB_SYSTEM_MSG} | awk -F "," '{ print $1 }')
+    MDB_STR_TMP=$(echo ${MDB_LEVEL_INFO} | tr [:upper:] [:lower:])
+    case ${MDB_STR_TMP} in
+        info|warn|err|crit)
+            :
+        ;;
+        *)
+            # Error configuration log level
+            logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:${OPT_I} in ${FJSVMAPDB_MSGLISTFILE} is wrong level)"
+            
+        return "${RESULT_NG}";;
+    esac
+    MDB_LEVEL_INFO="${MDB_STR_TMP}"
+    
+    local MDB_MESSAGE_INFO
+    MDB_MESSAGE_INFO=$(echo "${MDB_SYSTEM_MSG}" | awk -F "," '{ print $3 }')
+    if [ $? -ne 0 ] ; then
+        # Error configuration log message info
+        logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:wrong configuration \"${FUNCNAME} ${arg}\")"
+        return "${RESULT_NG}";
+    fi
+    local MDB_MSG
+    MDB_MSG=$(printf "${MDB_MESSAGE_INFO}\t%s%s%s%s%s%s%s%s%s" "${OPT_1}" "${OPT_2}" "${OPT_3}" "${OPT_4}" "${OPT_5}" "${OPT_6}" "${OPT_7}" "${OPT_8}" "${OPT_9}" | awk -F "\t" '{ print $1 }')
+    if [ "$?" -ne 0 ] ; then
+        # Error configuration log message info
+        logger -t "${OPT_T}[$$]" -p "local7.crit" "[crit] F000702 ${LOG_MODULE_ERROR}(message:wrong configuration \"${FUNCNAME} ${arg}\")"
+        return ${RESULT_NG};
+    fi
+    logger -t "${OPT_T}[$$]" -p "${MDB_FACILITY_INFO}.${MDB_LEVEL_INFO}" "[${MDB_LEVEL_INFO}] ${OPT_I} ${MDB_MSG}"
+    
+    return ${RESULT_OK};
+}
+
+mdb_apllog()
+{
+    local APLLOG_FILELINE=${FILELINE}
+    if [ "$APLLOG_FILELINE" == "" ]; then
+        local APLLOG_CALLER
+        APLLOG_CALLER=$(caller)
+        if [ "$?" -ne 0 ] ; then
+            if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: [caller]"
+            fi
+            APLLOG_FILELINE="FILELINE_NOT_DETECT"
+        else
+            # un-check pipe: can detect error by syslog
+            APLLOG_FILELINE=$(echo "${APLLOG_CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+            if [ "$?" -ne 0 ] ; then
+                if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                    >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${APLLOG_CALLER}]"
+                fi
+                APLLOG_FILELINE="FILELINE_NOT_DETECT"
+            fi
+        fi
+    fi
+    
+    if [ ! -w "${FJSVMAPDB_LOGFILE}" ]; then
+        # touch file if not exists or can not write
+        ${CMD_TOUCH} "${FJSVMAPDB_LOGFILE}" > /dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: Can not create file ${FJSVMAPDB_LOGFILE} by ${CMD_TOUCH}"
+            fi
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000702" -1 "${CMD_TOUCH} ${FJSVMAPDB_LOGFILE}"
+        fi
+        # change permission
+        ${CMD_CHMOD} 660 "${FJSVMAPDB_LOGFILE}" > /dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: Can not change permission ${FJSVMAPDB_LOGFILE} by ${CMD_CHMOD}"
+            fi
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000702" -1 "${CMD_CHMOD} ${FJSVMAPDB_LOGFILE}"
+        fi
+        # Default system, only root can execute chown but no problem with mapdb user
+        ${CMD_CHOWN} ${FJSVMAPDB_USERGROUP} "${FJSVMAPDB_LOGFILE}" > /dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: Can not change owner ${FJSVMAPDB_USERGROUP} for ${FJSVMAPDB_LOGFILE} by ${CMD_CHOWN}"
+            fi
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000702" -1 "${CMD_CHOWN} ${FJSVMAPDB_LOGFILE}"
+        fi
+    fi
+    # set default for avoid Ctrl+C at the time run "date" command
+    local DATE="YYYY-mm-ddTHH:MM:SS.NNNNNN+ZZ:zz"
+    DATE=$(${CMD_DATE} '+%FT%T.%6N%:z')
+    if [ $# != '2' ]; then
+        local APLMSG="Invalid parameter is specified for log output"
+        if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+            >&2 echo "${APLMSG}"
+        fi
+        echo "${DATE}" "[err]" "${APLMSG}" "[${APLLOG_FILELINE}]" >> "${FJSVMAPDB_LOGFILE}"
+        return ${RESULT_NG}
+    fi
+    
+    if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+        >&2 echo "$2"
+    fi
+    echo "${DATE}" "$1" "$2" "[${APLLOG_FILELINE}]" >> "${FJSVMAPDB_LOGFILE}"
+    return ${RESULT_OK}
+}
+
+mdb_apllog_critical() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo "${CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[crit]" "$@"
+}
+
+mdb_apllog_error() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo "${CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[err]" "$@"
+}
+
+mdb_apllog_warn() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo "${CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[warn]" "$@"
+}
+
+mdb_apllog_info() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo "${CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[info]" "$@"
+}
+
+mdb_apllog_debug() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo "${CALLER}" | "${CMD_SED}" -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ "${FJSVMAPDB_HIDE_APLLOG}" -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[debug]" "$@"
+}
+
+mdb_apllog_trace() {
+    local FILELINE=""
+    local CALLER
+    CALLER=$(caller)
+    if [ "$?" -ne 0 ] ; then
+        if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+            >&2 echo "mdb_apllog() failed: [caller]"
+        fi
+        FILELINE="FILELINE_NOT_DETECT"
+    else
+        FILELINE=$(echo ${CALLER} | ${CMD_SED} -r 's/^([0-9]+) (.*)/\2:\1/')
+        if [ "$?" -ne 0 ] ; then
+            if [ ${FJSVMAPDB_HIDE_APLLOG} -eq 0 ]; then
+                >&2 echo "mdb_apllog() failed: extract file-line failed [caller = ${CALLER}]"
+            fi
+            FILELINE="FILELINE_NOT_DETECT"
+        fi
+    fi
+    mdb_apllog "[trace]" "$@"
+}
+
+#function: mdb_logrotate ()
+#brief:
+#   - rotate and copy log to storage folder
+mdb_logrotate() {
+    # Comment
+    # mdb_apllog_info "Start rotate... arg=[$1]"
+    local RET=${RESULT_OK}
+    # get current time
+    local CUR_TIME=$(${CMD_DATE} +%Y%m%d%H%M%S%3N)
+    if [ "$1" == "--only-rotate" ]; then
+        if [ -w "${FJSVMAPDB_LOGFILE}" ]; then
+            local FJSVMAPDB_LOGFILE_SIZE
+            FJSVMAPDB_LOGFILE_SIZE=$("${CMD_STAT}" -c %s "${FJSVMAPDB_LOGFILE}")
+            if [ "$?" -ne 0 ]; then
+                mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_STAT}], [file = ${FJSVMAPDB_LOGFILE}]"
+                mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_STAT} fail."
+                return ${RESULT_NG}
+            fi
+            # FJSVMAPDB_LOGFILE_SIZE < FJSVMAPDB_MAX_LOGFILE_SIZE: ignore
+            if [ ${FJSVMAPDB_LOGFILE_SIZE} -lt ${FJSVMAPDB_MAX_LOGFILE_SIZE} ]; then
+                return ${RESULT_OK}
+            fi
+            # maximum file size
+            mdb_apllog_info "Move log file to permanent storage"
+            # move to permanent storage for avoid full memory log area.
+            local FJSVMAPDB_LOGFILE_DATETIME=${FJSVMAPDB_LOGFILE}.${CUR_TIME}
+            # rename file
+            ${CMD_MV} "${FJSVMAPDB_LOGFILE}" "${FJSVMAPDB_LOGFILE_DATETIME}" >/dev/null 2>&1
+            if [ "$?" -ne 0 ]; then
+                mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_MV}], [infile = ${FJSVMAPDB_LOGFILE}], [outfile = ${FJSVMAPDB_LOGFILE_DATETIME}]"
+                mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_MV} fail."
+                return ${RESULT_NG}
+            fi
+            # move file to storage
+            ${CMD_BACKUP} "${FJSVMAPDB_LOGFILE_DATETIME}" "${FJSVMAPDB_LOGDIR}" >/dev/null 2>&1
+            if [ "$?" -ne 0 ]; then
+                mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_BACKUP}], [infile = ${FJSVMAPDB_LOGFILE_DATETIME}], [backup directory = ${FJSVMAPDB_LOGDIR}]"
+                mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_MV} fail."
+                return ${RESULT_NG}
+            fi
+            RET=${RESULT_OK}
+        else
+            # no log file
+            mdb_apllog_critical "File not found log file: ${FJSVMAPDB_LOGFILE}"
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Log file not found."
+            RET=${RESULT_NG}
+        fi
+        # create log file with user FJSVMAPDB_USERGROUP (mapdb:mapdb) and permission 660
+        # create log file
+        ${CMD_TOUCH} "${FJSVMAPDB_LOGFILE}" >/dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_TOUCH}], [file = ${FJSVMAPDB_LOGFILE}]"
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_TOUCH} fail."
+            RET=${RESULT_NG}
+        fi
+        # change permission
+        ${CMD_CHMOD} 660 "${FJSVMAPDB_LOGFILE}" >/dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_CHMOD}], [file = ${FJSVMAPDB_LOGFILE}]"
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_CHMOD} fail."
+            RET=${RESULT_NG}
+        fi
+        # Default system, only root can execute chown but no problem with mapdb user
+        ${CMD_CHOWN} ${FJSVMAPDB_USERGROUP} "${FJSVMAPDB_LOGFILE}" >/dev/null 2>&1
+        if [ "$?" -ne 0 ]; then
+            mdb_apllog_critical "mdb_logrotate() failed [command = ${CMD_CHOWN}], [file = ${FJSVMAPDB_LOGFILE}]"
+            mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Command ${CMD_CHOWN} fail."
+            RET=${RESULT_NG}
+        fi
+        return ${RET}
+    else
+        # Add datetime to "*.log" file
+        ${CMD_FIND} "${FJSVMAPDB_MEMLOGDIR}" -maxdepth 1 -type f -name "*.log" -print0 | ${CMD_XARGS} -0 -r -n 1 -P 0 -I {} ${CMD_MV} "{}" "{}.${CUR_TIME}"
+        mdb_cmd_check_pipestatus "${PIPESTATUS[@]}"
+        local RETCODE=$?
+        if [ ${RETCODE} -ne 0 ]; then
+            mdb_apllog_warn "Append datetime to .log file happen error [cmdno = ${FJSVMAPDB_PIPENO_FAILED}, retcode = ${RETCODE}]"
+            RET=${RESULT_NG}
+        fi
+        
+        # move all file in tmp folder to storage
+        ${CMD_FIND} "${FJSVMAPDB_MEMLOGDIR}" -maxdepth 1 -type f -print0 | ${CMD_XARGS} -0 -r -n 1 -P 0 -I {} ${CMD_BACKUP} "{}" "${FJSVMAPDB_LOGDIR}"
+        mdb_cmd_check_pipestatus "${PIPESTATUS[@]}"
+        RETCODE=$?
+        if [ ${RETCODE} -ne 0 ]; then
+            mdb_apllog_warn "Move log file to ${FJSVMAPDB_LOGDIR} happen error [cmdno = ${FJSVMAPDB_PIPENO_FAILED}, retcode = ${RETCODE}]"
+            RET=${RESULT_NG}
+        fi
+        
+        mdb_apllog_info "Clean done [$RET]!"
+        return ${RET}
+    fi
+    
+}
+
+# func: progress_bar
+# brief: show process bar
+progress_bar() {
+    _bar=# ; _bar=${_bar:=#}
+    while :
+    do
+        jobs %1 > /dev/null 2>&1
+        if [ $? -eq 1 ]; then
+            echo ""
+            wait "${1}"> /dev/null 2>&1
+            return "$?"
+        fi
+        echo -n ${_bar}
+        sleep 1 > /dev/null 2>&1
+    done;
+}
+
+if [ "${SIGNALS}" == "" ]; then
+    SIGNALS="SIGINT SIGCHLD"
+fi
+
+if [ ! "$(type -t mdb_handle_signal_external)" == "function" ]; then
+    mdb_apllog_critical "mdb_handle_signal_external function do not define."
+    mdb_syslog -t "${FJSVMAPDB_SCRIPTNAME}" -i "F000701" -1 "Function not found."
+    exit ${RESULT_NG}
+fi
+
+# Set default umask
+umask 0007

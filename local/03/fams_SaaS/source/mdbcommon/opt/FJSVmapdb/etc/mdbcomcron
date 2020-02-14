@@ -1,0 +1,10 @@
+# COPYRIGHT 2017 FUJITSU LIMITED
+# @file        mdbcomcron
+# @brief       the setting for crontab must me config according to
+#              this value in order to make this script executed
+# @author      wada
+# @date        2017/2/8
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+0 1 * * * root /usr/bin/find /var/log/mapdb -type f -mtime +2 -print0 | xargs -0 -r -n 1 -P 0 -I {} \rm "{}" > /dev/null 2>&1

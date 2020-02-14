@@ -1,0 +1,14 @@
+# COPYRIGHT 2017 FUJITSU LIMITED
+# @file        mapdb
+# @brief       mapdb logrotate file
+# @author      wada
+# @date        2016/10/25
+/var/log/application
+{
+    missingok
+    create 660 mapdb mapdb
+    sharedscripts
+    postrotate
+        /bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
+    endscript
+}
