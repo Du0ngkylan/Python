@@ -1,0 +1,14 @@
+!MESH, NAME=fstrMSH,TYPE=HECMW-ENTIRE
+ab.msh
+!MESH, NAME=mesh,TYPE=HECMW-ENTIRE
+ab.msh
+!CONTROL,NAME=fstrCNT
+ab.cnt
+!RESTART,NAME=restart_out,IO=OUT
+ab.restart
+!RESULT,NAME=fstrRES,IO=OUT
+ab.res
+!RESULT,NAME=result,IO=IN
+ab.res
+!RESULT,NAME=vis_out,IO=OUT
+ab.vis
