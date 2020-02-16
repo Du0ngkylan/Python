@@ -1,1 +1,0 @@
-link ../lib/libmdbhttp/include/MDBURIHelper.h

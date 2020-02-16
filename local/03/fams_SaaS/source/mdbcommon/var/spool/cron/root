@@ -1,7 +1,0 @@
-# COPYRIGHT 2017 FUJITSU LIMITED
-# @file        root
-# @brief       root user cron file
-# @author      wada
-# @date        2016/11/2
-MAILTO=""
-* * * * * /bin/echo 3 > /proc/sys/vm/drop_caches
